@@ -121,9 +121,60 @@ def get_cancer_mask(img):
     img = ((img-img.min())/255).astype(bool)
     
     # Use the bool values to create a mask
-    filled = binary_fill_holes(img[:,:,0].astype(bool)).reshape(img.shape[0], img.shape[1], 1)
+    mask = binary_fill_holes(img[:,:,0].astype(bool)).reshape(img.shape[0], img.shape[1], 1)
+
     
-    # Turn the mask 3-D to fit image.
-    mask = np.concatenate([filled, filled, filled], axis=2).astype(float)
+    return mask.astype(np.int8)
+
+
+
+def get_cancer_mole(img):
+    """
+    Function that gets only the cancer mole from an image
+    and returns the rest of the image pixels set to 0
+
+    Inputs
+    --------------
+    img : RGB numpy image
+
+    Outputs
+    ----------------
+    img : RGB numpy image after masking
+    """
     
-    return mask
+    mask = get_cancer_mask(img)
+    
+    res = cv2.bitwise_and(img, img, mask=mask)
+    
+    return res
+
+
+def juxtapose_mole_and_background(cancer_img, background_img):
+    
+    """
+    Given an unprocessed cancer image and background image,
+    gets the cancer mole and superimposeses it on the background
+    image, and returns the juxtaposed image
+
+    Inputs
+    ----------------------------------
+    cancer_image : RGB 3-D NP array
+    background_image : RGB 3-D NP array
+
+    Output
+    -------------------
+    Juxtaposed_image: Background with Mole superimpsed; RGB 3-D NP Array
+     """
+
+
+    mask = get_cancer_mask(cancer_img)
+    
+    mole = cv2.bitwise_and(cancer_img, cancer_img, mask=mask)
+
+    mask = 1 - mask
+    
+    cleared_background = cv2.bitwise_and(background_img, background_img, mask=mask)
+    
+    mixed_img = cv2.bitwise_or(mole, cleared_background)
+    
+    return mixed_img
