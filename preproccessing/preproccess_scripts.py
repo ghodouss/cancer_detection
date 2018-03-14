@@ -5,28 +5,9 @@ from scipy.ndimage.morphology import binary_fill_holes
 
 
 
-def gray_and_blur(img, k_size=13):
-    """
-    Module to convert image to grayscale and
-    to blur for easier edge detection
 
-    Inputs
-    ---------------
-    img: A RGB numpy file
 
-    Outputs
-    --------------
-    img: 3-D Grayscale numpy file
-    """  
-    #convert to grayscale
-    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
-    #blur image
-    img = cv2.GaussianBlur(img, (k_size, k_size), 0)
-    
-    return img
-
-def pre_edge(imgs, k_size=13):
+def get_cancer_mole(img, k_size=5):
 
     """
     runs gray and blur for np images
@@ -40,113 +21,55 @@ def pre_edge(imgs, k_size=13):
     -----------------------
     proccessed: list of gray and blurred 3-D np files
     """
-    processed = []
     
-    for img in imgs:
+    #grey image
+    img = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    
+    # blur image
+    blur = cv2.GaussianBlur(img,(k_size,k_size),0)
+    
+    # apply Otsu's threshold
+    ret3, mask = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+    
+    # Run blur to close contours and remove remaining noise
+    se = np.ones((11,11), dtype='uint8')
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, se)
+    mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, se)
         
-        processed.append(gray_and_blur(img, k_size))
-        
-    return processed
+    return mask
 
 
-def get_edges(imgs, low_t=40, high_t=120, k_size=17):
+
+def get_cancer_mask(img, k_size=5):
+
     """
-    given a list of images, run through the
-    images and returns a list of images
-    run through Canny Edge Detection
+    runs gray and blur for np images
+    in a list and returns new list
 
     Inputs
-    -----------------
-    imgs: list of np RGB img files
-
-    Outputs
-    ---------------
-    edged: list of 3-D np Canny-edge img files 
-    """
-
-    edged = []
-    #process images
-    processed = pre_edge(imgs, k_size=k_size)
-    
-    for img in processed:
-        edged.append(cv2.Canny(img, low_t, high_t))
-        
-    return edged
-
-
-def get_cancer_mask(img):
-    """
-    Pass in a single image and returns
-    a mask image with 1's at the location of the
-    cancer mole and 0's everywhere else.
-
-    Inputs
-    ------------------
-    img : RGB NP image file
-
-    Outputs
-    ------------------
-    mask : a 3-D NP file that provides 0-1 mask values
-    """
-    
-    # Copies image to not effect original img.
-    img = img.copy()
-    
-    # Gets canny edges for the img.
-    edge = get_edges([img])[0]
-    
-    # Get the contours from the edged image.
-    _ , contours, hierarchy = cv2.findContours(edge,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
-    
-    # Get the areas and choose the contour that has the max area:
-    areas = []
-    
-    # getting areas,
-    for cntr in contours:
-        areas.append(cv2.contourArea(cntr))
-    
-    # and getting biggest contour.
-    max_index = (areas.index(max(areas)))
-    max_cntr = contours[max_index]
-    
-    # Load blank imag and draw the max contour on the image in white.
-    img = np.ones(img.shape)
-    img = cv2.drawContours(img, max_cntr, -1, (255,255,255), 3)
-    
-    # Run blur to close the contour.
-    se = np.ones((9,9), dtype='uint8')
-    img = cv2.morphologyEx(img, cv2.MORPH_CLOSE, se)
-    
-    # Set min values to zero, and convert to bool.
-    img = ((img-img.min())/255).astype(bool)
-    
-    # Use the bool values to create a mask
-    mask = binary_fill_holes(img[:,:,0].astype(bool)).reshape(img.shape[0], img.shape[1], 1)
-
-    
-    return mask.astype(np.int8)
-
-
-
-def get_cancer_mole(img):
-    """
-    Function that gets only the cancer mole from an image
-    and returns the rest of the image pixels set to 0
-
-    Inputs
-    --------------
-    img : RGB numpy image
-
-    Outputs
     ----------------
-    img : RGB numpy image after masking
+    img: list of numpy RGB img files
+
+    Outputs
+    -----------------------
+    proccessed: list of gray and blurred 3-D np files
     """
     
-    mask = get_cancer_mask(img)
     
-    res = cv2.bitwise_and(img, img, mask=mask)
+    mask = get_cancer_mole(img, k_size)
     
-    return res
+
+    # invert 
+    mask = (255 -mask)
+    
+    #reshape to fit 3-D RGB
+    mask = mask.reshape([mask.shape[0], mask.shape[1], 1])
+    
+    # Convert the mask to bools then back to int to get to 0 and 1
+    mask = mask.astype(bool).astype(np.int8)
+    
+        
+    return mask
 
 
 def juxtapose_mole_and_background(cancer_img, background_img):
@@ -168,13 +91,58 @@ def juxtapose_mole_and_background(cancer_img, background_img):
 
 
     mask = get_cancer_mask(cancer_img)
+
+    mask=mask[:,:,0:1].astype(np.int8)
+    
     
     mole = cv2.bitwise_and(cancer_img, cancer_img, mask=mask)
-
-    mask = 1 - mask
     
-    cleared_background = cv2.bitwise_and(background_img, background_img, mask=mask)
+    
+    cleared_background = cv2.bitwise_and(background_img, background_img, mask=(1-mask))
+    
     
     mixed_img = cv2.bitwise_or(mole, cleared_background)
     
     return mixed_img
+
+
+def load_data(img_path, descr_path, start=0, end=100):
+    
+    filenames = os.listdir(descr_path)
+    
+    df = pd.DataFrame(columns= ['diagnosis', 'benign_malignant', 'melanocytic', 'images'])
+    
+    images = []
+    diagnosis = []
+    benign_malignant = []
+    melanocytic = []
+    
+    i = start
+    
+    for file in filenames:
+        
+        if i > end:
+            break
+
+        data = json.load(open(descr_path+file))
+
+        clinical = data["meta"]["clinical"]
+        
+        if "diagnosis" and "benign_malignant" and "melanocytic" in clinical.keys():
+        
+            diagnosis.append(clinical["diagnosis"])
+            benign_malignant.append(clinical["benign_malignant"])
+            melanocytic.append(clinical["melanocytic"])  
+            
+            img = cv2.imread(str(img_path)+str(file)+".jpg")
+            img = cv2.resize(img, (base_width, base_height))
+            
+            images.append(img)
+            
+            i += 1
+        
+    df['diagnosis'] = np.array(diagnosis)
+    df['benign_malignant'] = np.array(benign_malignant)
+    df['melanocytic'] = np.array(melanocytic)
+    
+    return df, np.array(images)
