@@ -135,7 +135,8 @@ def load_data(img_path, descr_path, start=0, end=100):
             melanocytic.append(clinical["melanocytic"])  
             
             img = cv2.imread(str(img_path)+str(file)+".jpg")
-            img = cv2.resize(img, (base_width, base_height))
+            #224 x 224 because we are using VGGnet
+            img = cv2.resize(img, (224, 224))
             
             images.append(img)
             
