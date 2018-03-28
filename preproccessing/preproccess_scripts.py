@@ -106,7 +106,7 @@ def juxtapose_mole_and_background(cancer_img, background_img):
     return mixed_img
 
 
-def load_data(img_path, descr_path, start=0, end=100):
+def load_data(img_path, descr_path, start=0, end=100, base_width=244, base_height=244):
     
     filenames = os.listdir(descr_path)
     
@@ -135,8 +135,7 @@ def load_data(img_path, descr_path, start=0, end=100):
             melanocytic.append(clinical["melanocytic"])  
             
             img = cv2.imread(str(img_path)+str(file)+".jpg")
-            #224 x 224 because we are using VGGnet
-            img = cv2.resize(img, (224, 224))
+            img = cv2.resize(img, (base_width, base_height))
             
             images.append(img)
             
