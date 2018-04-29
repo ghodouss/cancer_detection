@@ -106,7 +106,7 @@ def juxtapose_mole_and_background(cancer_img, background_img):
     return mixed_img
 
 
-def load_data(img_path, descr_path, start=0, end=100):
+def load_data(img_path, descr_path, start=0, end=100, base_width=244, base_height=244):
     
     filenames = os.listdir(descr_path)
     
